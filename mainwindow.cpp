@@ -235,11 +235,31 @@ void MainWindow::on_openRomButton_clicked()
             romData = romFile.readAll();
             romFile.close();
 
+            ui->saveRomButton->setEnabled(true);
+            ui->saveRomAsButton->setEnabled(true);
+            ui->exportBinButton->setEnabled(true);
+            ui->exportPalButton->setEnabled(true);
+            ui->exportPaletteButton->setEnabled(true);
+            ui->importBinButton->setEnabled(true);
+            ui->importPalButton->setEnabled(true);
+            ui->importPaletteButton->setEnabled(true);
+            ui->loadPaletteButton->setEnabled(true);
+
             ui->romPathLabel->setText(romFilePath);
             updateStatusMessage("SUCCESS: Opened ROM file.");
         }
         else
         {
+            ui->saveRomButton->setEnabled(false);
+            ui->saveRomAsButton->setEnabled(false);
+            ui->exportBinButton->setEnabled(false);
+            ui->exportPalButton->setEnabled(false);
+            ui->exportPaletteButton->setEnabled(false);
+            ui->importBinButton->setEnabled(false);
+            ui->importPalButton->setEnabled(false);
+            ui->importPaletteButton->setEnabled(false);
+            ui->loadPaletteButton->setEnabled(false);
+
             romFilePath = oldRomFilePath;
             ui->romPathLabel->setText(romFilePath);
             updateStatusMessage("ERROR: Failed to open ROM file.");
@@ -399,8 +419,6 @@ void MainWindow::on_importPaletteButton_clicked()
                         x = i % rowWidth;
                         y = i / rowWidth;
 
-                        qDebug() << i << x << y;
-
                         pixelColor = newPaletteImage.pixelColor(x, y);
                         snesColor = rgbToSNES(pixelColor);
                         romBufferStream << snesColor;
@@ -453,8 +471,6 @@ void MainWindow::on_exportPaletteButton_clicked()
                 QString romName = romInfo.fileName();
                 QString romFolderPath = romInfo.absolutePath();
                 filePath = romFolderPath + "/" + romName + "-$" + QString::number(paletteAddress, 16) + ".png";
-
-                qDebug() << filePath;
             }
             else
             {
@@ -643,53 +659,76 @@ void MainWindow::on_importPalButton_clicked()
     {
         if (ui->addressBox->hasAcceptableInput())
         {
-            QString paletteImagePath = QFileDialog::getOpenFileName(this, tr("Open .PAL file"), QDir::homePath(), tr("SNES Palettes (*.pal)"));
-            QImage newPaletteImage = QImage(paletteImagePath);
+            QString palFilePath = QFileDialog::getOpenFileName(this, tr("Open .PAL file"), QDir::homePath(), tr("SNES Palettes (*.pal)"));
 
-            paletteAddress = hexStringToInt(ui->addressBox->text());
-
-            colorCount = ui->colorCountBox->value();
-
-
-
-
-            if (colorCountFromImage == true || imageColorCount < colorCount)
+            if (!palFilePath.isEmpty())
             {
-                ui->colorCountBox->setValue(imageColorCount);
-                colorCount = imageColorCount;
-            }
+                QFile palFile(palFilePath);
 
-            if (romData.size() > paletteAddress + (colorCount *2))
-            {
-                QDataStream romBufferStream(&romData, QIODevice::WriteOnly);
-                romBufferStream.setByteOrder(QDataStream::LittleEndian);
-                romBufferStream.device()->seek(paletteAddress);
+                paletteAddress = hexStringToInt(ui->addressBox->text());
+                colorCount = ui->colorCountBox->value();
 
-                int x = 0;
-                int y = 0;
-                QColor pixelColor;
-                quint16 snesColor;
-
-                for (int i = 0; i < colorCount; i++)
+                if (palFile.open(QIODevice::ReadOnly))
                 {
-                    x = i % rowWidth;
-                    y = i / rowWidth;
+                    QByteArray palData = palFile.readAll();
+                    quint32 palColorCount = palData.size() / 3;
+                    palFile.close();
 
-                    qDebug() << i << x << y;
+                    if (colorCountFromImage == true || palColorCount < colorCount)
+                    {
+                        ui->colorCountBox->setValue(palColorCount);
+                        colorCount = palColorCount;
+                    }
 
-                    pixelColor = newPaletteImage.pixelColor(x, y);
-                    snesColor = rgbToSNES(pixelColor);
-                    romBufferStream << snesColor;
+                    if (romData.size() > paletteAddress + (colorCount * 2))
+                    {
+                        QDataStream romBufferStream(&romData, QIODevice::WriteOnly);
+                        romBufferStream.setByteOrder(QDataStream::LittleEndian);
+                        romBufferStream.device()->seek(paletteAddress);
+
+                        QDataStream palDataStream(&palData, QIODevice::ReadOnly);
+
+                        QColor color;
+                        quint8 red;
+                        quint8 green;
+                        quint8 blue;
+                        quint16 snesColor;
+
+                        for (int i = 0; i < colorCount; i++)
+                        {
+                            palDataStream >> red;
+                            palDataStream >> green;
+                            palDataStream >> blue;
+
+                            color.setRed(red);
+                            color.setGreen(green);
+                            color.setBlue(blue);
+
+                            snesColor = rgbToSNES(color);
+
+                            romBufferStream << snesColor;
+                        }
+
+                        updatePalette();
+                        updatePreview();
+
+                        updateStatusMessage("SUCCESS: Imported palette to ROM.");
+                    }
+                    else
+                    {
+                        updateStatusMessage("ERROR: Invalid palette address.");
+                        return;
+                    }
                 }
-
-                updatePalette();
-                updatePreview();
-
-                updateStatusMessage("SUCCESS: Imported palette to ROM.");
+                else
+                {
+                    updateStatusMessage("ERROR: Failed to open .pal file.");
+                    return;
+                }
             }
             else
             {
-                updateStatusMessage("ERROR: Invalid palette address.");
+                updateStatusMessage("ERROR: No .pal path provided.");
                 return;
             }
         }
@@ -714,9 +753,10 @@ void MainWindow::on_exportPalButton_clicked()
     QString filePath;
     if (!romData.isEmpty())
     {
-        if (!paletteData.isEmpty())
+
+        if (ui->addressBox->hasAcceptableInput())
         {
-            if (ui->addressBox->hasAcceptableInput())
+            if (!paletteData.isEmpty())
             {
                 if (quickExtract == true)
                 {
@@ -779,13 +819,13 @@ void MainWindow::on_exportPalButton_clicked()
             }
             else
             {
-                updateStatusMessage("ERROR: Invalid palette address.");
+                updateStatusMessage("ERROR: No palette data to process.");
                 return;
             }
         }
         else
         {
-            updateStatusMessage("ERROR: No palette data to process.");
+            updateStatusMessage("ERROR: Invalid palette address.");
             return;
         }
     }
@@ -853,10 +893,19 @@ void MainWindow::on_addressBox_cursorPositionChanged(int arg1, int arg2)
     }
 }
 
+
+
 void MainWindow::on_actionAbout_triggered()
 {
-    QMessageBox::about(nullptr, "About", "Super Palette Imager Version: 1.0.0.\n\nCopyright © 2024 Alex Corley (H4v0c21).\n\nSuper Palette Imager is a program designed to edit the color palettes of Super Nintendo games primarily through the use of importing/exporting color palettes as images.");
+    QMessageBox::about(nullptr, "About",
+"Super Palette Imager Version: 1.1.0.\n\n"
+
+"Copyright © 2024 Alex Corley (H4v0c21).\n\n"
+
+"Super Palette Imager is a program designed to edit the color palettes of SNES games primarily through the use of importing/exporting color palettes as images."
+);
 }
+
 
 
 void MainWindow::on_quickExtractCheckBox_stateChanged(int arg1)
@@ -870,4 +919,3 @@ void MainWindow::on_quickExtractCheckBox_stateChanged(int arg1)
         quickExtract = false;
     }
 }
-
