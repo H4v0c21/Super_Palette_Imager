@@ -17,8 +17,9 @@
 #include <QStatusBar>
 #include <qDebug>
 
-#include <QRegExpValidator>
-#include <QRegExp>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
+//#include <QRegExp>
 
 
 
@@ -55,6 +56,9 @@ public:
     quint32 paletteImageHeight;
     quint32 previewScale;
 
+    QDir lastROMPath;
+    QDir lastPalettePath;
+
     bool quickExtract;
 
     ~MainWindow();
@@ -88,6 +92,8 @@ private slots:
 
     void on_quickExtractCheckBox_stateChanged(int arg1);
 
+    void on_rowWidthBox_valueChanged(int arg1);
+
 private:
     Ui::MainWindow *ui;
     QTimer *consoleTextTimer;
@@ -98,5 +104,7 @@ private:
     void updatePalette();
     void updatePreview();
     void updateStatusMessage(QString);
+    void updateLastFilePath(QString, QDir*);
+
 };
 #endif // MAINWINDOW_H

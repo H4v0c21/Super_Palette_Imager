@@ -71,10 +71,11 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    QRegExp hexRegex("[0-9A-Fa-f]{6}");
-    QRegExpValidator validator(hexRegex, ui->addressBox);
+    QRegularExpression hexRegex("[0-9A-Fa-f]{6}");
+    QRegularExpressionValidator validator(hexRegex, ui->addressBox);
     ui->addressBox->setValidator(&validator);
 
+    ui->rowWidthBox->setValue(16);
     ui->colorCountBox->setValue(128);
     colorCountFromImage = false;
 
@@ -96,11 +97,21 @@ MainWindow::MainWindow(QWidget *parent)
     paletteImage = QImage(paletteImageWidth, paletteImageHeight, QImage::Format_RGB32);
     paletteImage.fill(Qt::white);
 
+    lastROMPath = QDir::homePath();
+    lastPalettePath = QDir::homePath();
+
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::updateLastFilePath(QString filePath, QDir* path)
+{
+    QFileInfo fileInfo(filePath);
+    QString lastFolderPath = fileInfo.absolutePath();
+    path->setPath(lastFolderPath);
 }
 
 
@@ -122,6 +133,7 @@ void MainWindow::updatePalette()
         {
             paletteAddress = hexStringToInt(ui->addressBox->text());
             colorCount = ui->colorCountBox->value();
+            rowWidth = ui->rowWidthBox->value();
             getPaletteBinFromROM();
             getImageFromBin();
         }
@@ -169,7 +181,7 @@ void MainWindow::getImageFromBin()
 {
     if (!paletteData.isEmpty())
     {
-        rowWidth = 16;
+        //rowWidth = 16;
 
         QDataStream paletteBufferStream(paletteData);
         paletteBufferStream.setByteOrder(QDataStream::LittleEndian);
@@ -225,7 +237,10 @@ void MainWindow::resetConsoleText()
 void MainWindow::on_openRomButton_clicked()
 {
     QString oldRomFilePath = romFilePath;
-    romFilePath = QFileDialog::getOpenFileName(this, tr("Open ROM file"), QDir::homePath(), tr("SNES ROMs (*.sfc *.smc)"));
+
+
+    romFilePath = QFileDialog::getOpenFileName(this, tr("Open ROM file"), lastROMPath.path(), tr("SNES ROMs (*.sfc *.smc)"));
+
     QFile romFile(romFilePath);
 
     if (!romFilePath.isEmpty())
@@ -234,6 +249,9 @@ void MainWindow::on_openRomButton_clicked()
         {
             romData = romFile.readAll();
             romFile.close();
+
+            this->updateLastFilePath(romFilePath, &lastROMPath);
+            qDebug() << lastROMPath;
 
             ui->saveRomButton->setEnabled(true);
             ui->saveRomAsButton->setEnabled(true);
@@ -318,7 +336,7 @@ void MainWindow::on_saveRomAsButton_clicked()
 {
     if (!romData.isEmpty())
     {
-        QString filePath = QFileDialog::getSaveFileName(this, "Save ROM file", "", "SNES ROMs (*.sfc *.smc)");
+        QString filePath = QFileDialog::getSaveFileName(this, "Save ROM file", lastROMPath.path(), "SNES ROMs (*.sfc *.smc)");
 
         if (!filePath.isEmpty())
         {
@@ -383,17 +401,23 @@ void MainWindow::on_importPaletteButton_clicked()
     {
         if (ui->addressBox->hasAcceptableInput())
         {
-            QString paletteImagePath = QFileDialog::getOpenFileName(this, tr("Open Palette Image"), QDir::homePath(), tr("Images (*.png *.bmp)"));
+            QString paletteImagePath = QFileDialog::getOpenFileName(this, tr("Open Palette Image"), lastPalettePath.path(), tr("Images (*.png *.bmp)"));
             QImage newPaletteImage = QImage(paletteImagePath);
 
             if (!newPaletteImage.isNull())
             {
+                this->updateLastFilePath(paletteImagePath, &lastPalettePath);
+                qDebug() << lastROMPath;
+
                 paletteAddress = hexStringToInt(ui->addressBox->text());
 
                 colorCount = ui->colorCountBox->value();
 
                 paletteImageWidth = newPaletteImage.width();
                 paletteImageHeight = newPaletteImage.height();
+
+                rowWidth = paletteImageWidth;
+                ui->rowWidthBox->setValue(rowWidth);
 
                 imageColorCount = paletteImageWidth * paletteImageHeight;
 
@@ -475,6 +499,8 @@ void MainWindow::on_exportPaletteButton_clicked()
             else
             {
                 filePath = QFileDialog::getSaveFileName(this, "Save as Palette Image", "", "Images (*.png *.bmp)");
+                this->updateLastFilePath(filePath, &lastPalettePath);
+                qDebug() << lastROMPath;
             }
 
             if (!paletteImage.isNull())
@@ -526,13 +552,16 @@ void MainWindow::on_importBinButton_clicked()
     {
         if (ui->addressBox->hasAcceptableInput())
         {
-            QString binFilePath = QFileDialog::getOpenFileName(this, tr("Open Raw Palette Data"), QDir::homePath(), tr("SNES Palettes (*.bin)"));
+            QString binFilePath = QFileDialog::getOpenFileName(this, tr("Open Raw Palette Data"), lastPalettePath.path(), tr("SNES Palettes (*.bin)"));
             QFile binFile(binFilePath);
 
             if (!binFilePath.isEmpty())
             {
                 if (binFile.open(QIODevice::ReadOnly))
                 {
+                    this->updateLastFilePath(binFilePath, &lastPalettePath);
+                    qDebug() << lastROMPath;
+
                     QByteArray binData = binFile.readAll();
                     quint32 binColorCount = binData.size() / 2;
                     binFile.close();
@@ -603,6 +632,8 @@ void MainWindow::on_exportBinButton_clicked()
             else
             {
                 filePath = QFileDialog::getSaveFileName(this, "Save as Raw Palette Data", "", "Binary Data (*.bin)");
+                this->updateLastFilePath(filePath, &lastPalettePath);
+                qDebug() << lastROMPath;
             }
 
             if (!filePath.isEmpty())
@@ -659,7 +690,7 @@ void MainWindow::on_importPalButton_clicked()
     {
         if (ui->addressBox->hasAcceptableInput())
         {
-            QString palFilePath = QFileDialog::getOpenFileName(this, tr("Open .PAL file"), QDir::homePath(), tr("SNES Palettes (*.pal)"));
+            QString palFilePath = QFileDialog::getOpenFileName(this, tr("Open .PAL file"), lastPalettePath.path(), tr("SNES Palettes (*.pal)"));
 
             if (!palFilePath.isEmpty())
             {
@@ -667,9 +698,13 @@ void MainWindow::on_importPalButton_clicked()
 
                 paletteAddress = hexStringToInt(ui->addressBox->text());
                 colorCount = ui->colorCountBox->value();
+                rowWidth = ui->rowWidthBox->value();
 
                 if (palFile.open(QIODevice::ReadOnly))
                 {
+                    this->updateLastFilePath(palFilePath, &lastPalettePath);
+                    qDebug() << lastROMPath;
+
                     QByteArray palData = palFile.readAll();
                     quint32 palColorCount = palData.size() / 3;
                     palFile.close();
@@ -768,6 +803,8 @@ void MainWindow::on_exportPalButton_clicked()
                 else
                 {
                     filePath = QFileDialog::getSaveFileName(this, "Save as .PAL file", "", "SNES Palettes (*.pal)");
+                    this->updateLastFilePath(filePath, &lastPalettePath);
+                    qDebug() << lastROMPath;
                 }
 
                 if (!filePath.isEmpty())
@@ -863,6 +900,7 @@ void MainWindow::on_addressBox_editingFinished()
 
 void MainWindow::on_colorCountBox_valueChanged(int arg1)
 {
+    //Should this only happen if the address is valid?
     updatePalette();
 
     if (!ui->addressBox->text().isEmpty())
@@ -870,6 +908,20 @@ void MainWindow::on_colorCountBox_valueChanged(int arg1)
         updatePreview();
     }
 }
+
+void MainWindow::on_rowWidthBox_valueChanged(int arg1)
+{
+    rowWidth = ui->rowWidthBox->value();
+
+    //Should this only happen if the address is valid?
+    updatePalette();
+
+    if (!ui->addressBox->text().isEmpty())
+    {
+        updatePreview();
+    }
+}
+
 
 
 
@@ -898,9 +950,9 @@ void MainWindow::on_addressBox_cursorPositionChanged(int arg1, int arg2)
 void MainWindow::on_actionAbout_triggered()
 {
     QMessageBox::about(nullptr, "About",
-"Super Palette Imager Version: 1.1.0.\n\n"
+"Super Palette Imager Version: 1.2.0.\n\n"
 
-"Copyright © 2024 Alex Corley (H4v0c21).\n\n"
+"Copyright © 2025 Alex Corley (H4v0c21).\n\n"
 
 "Super Palette Imager is a program designed to edit the color palettes of SNES games primarily through the use of importing/exporting color palettes as images."
 );
